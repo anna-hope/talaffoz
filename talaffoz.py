@@ -259,8 +259,7 @@ def main(prons_fp, model_fp, max_length,
             print()
 
         except Exception as e:
-            raise e
-            # print(e, e.args)
+            print(e, e.args)
 
 
 if __name__ == '__main__':
