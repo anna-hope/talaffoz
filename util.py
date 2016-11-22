@@ -20,12 +20,13 @@ def load_data(file_path: Union[Path, str],
               only_alpha=True) -> Dict[str, List[str]]:
     logging.info('loading the data file {}'.format(file_path))
     file_path = Path(file_path)
-    with file_path.open(encoding='utf-8') as f:
-        pronunciations = json.load(f)
+    with file_path.open() as f:
+        seq2seq = json.load(f)
 
-    words_ipa = {word: v['ipa'] for word, v in pronunciations.items()
-                 if word.isalpha()}
-    return words_ipa
+    # words_ipa = {word: v['ipa']
+    #              for word, v in pronunciations.items()}
+    return seq2seq
+
 
 
 def make_sequence_ids(seqs: Iterable[Iterable[Hashable]]) -> Dict[Hashable, int]:

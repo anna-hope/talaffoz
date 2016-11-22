@@ -62,12 +62,17 @@ def bucket_data(pronunciations: Dict[str, List[str]]):
     return buckets, data_buckets
 
 
-def prepare_data(pronunciations, max_length=20):
+def prepare_data(pronunciations, max_length=0):
     logging.info('preparing the data...')
     end_char = '#'
 
-    padded_pronunciations = {}
-    for word, pronunciation in pronunciations.items():
+    if not max_length:
+        longest_input = max(len(input) for input, _ in pronunciations)
+        longest_output = max(len(output) for _, output in pronunciations)
+        max_length = max((longest_input, longest_output))
+
+    padded_pronunciations = []
+    for word, pronunciation in pronunciations:
 
         if len(word) <= max_length and len(pronunciation) <= max_length:
             word = [c for c, _ in zip_longest(word, range(max_length),
@@ -75,18 +80,21 @@ def prepare_data(pronunciations, max_length=20):
             pronunciation = [s for s, _ in zip_longest(pronunciation, range(max_length),
                                                        fillvalue=end_char)]
 
-            word = ''.join(word)
-            padded_pronunciations[word] = pronunciation
+            padded_pronunciations.append((word, pronunciation))
 
     pronunciations = padded_pronunciations
 
     # assign an id to each letter
-    all_letters = sorted(set(chain.from_iterable(pronunciations)))
-    letter_ids = {letter: n for n, letter in enumerate(all_letters)}
+    pronunciations_keys = (element[0] for element in pronunciations)
+    all_letters = sorted(set(chain.from_iterable(pronunciations_keys)))
+    letter_ids = {letter: n for n, letter in enumerate(all_letters, 1)}
+    letter_ids[end_char] = 0
 
     # assign an id to each ipa symbol
-    all_ipa = sorted(set(chain.from_iterable(pronunciations.values()))) # experiment
-    ipa_ids = {symbol: n for n, symbol in enumerate(all_ipa)}
+    pronunciations_values = (element[1] for element in pronunciations)
+    all_ipa = sorted(set(chain.from_iterable(pronunciations_values))) # experiment
+    ipa_ids = {symbol: n for n, symbol in enumerate(all_ipa, 1)}
+    ipa_ids[end_char] = 0
 
     # one-hot
     X = np.zeros((len(pronunciations), max_length, len(letter_ids)),
@@ -94,7 +102,7 @@ def prepare_data(pronunciations, max_length=20):
     y = np.zeros((len(pronunciations), max_length, len(ipa_ids)),
                  dtype=bool)
 
-    for n, (word, pronunciation) in enumerate(pronunciations.items()):
+    for n, (word, pronunciation) in enumerate(pronunciations):
         for i, c in enumerate(word):
             letter_id = letter_ids[c]
             X[n, i, letter_id] = True
@@ -112,11 +120,16 @@ def build_model(n_letters, n_symbols, max_len,
     inputs = Input(shape=(None, n_letters))
 
     # add the encoder layers
-    for _ in range(input_layers - 1):
-        inputs = LSTM(hidden_units, consume_less='cpu',
-                      return_sequences=True)(inputs)
 
-    encoded = LSTM(hidden_units, consume_less='cpu')(inputs)
+    # assign this variable
+    # so that multiple encoder layers
+    # can be stacked in a loop
+    encoded = inputs
+    for _ in range(input_layers - 1):
+        encoded = LSTM(hidden_units, consume_less='cpu',
+                       return_sequences=True)(encoded)
+
+    encoded = LSTM(hidden_units, consume_less='cpu')(encoded)
 
     decoded = RepeatVector(max_len)(encoded)
 
@@ -250,7 +263,11 @@ def main(prons_fp, model_fp, max_length,
 
     while True:
         try:
-            words = input('> ').casefold().split()
+            words = input('> ').split('  ')
+
+            # in case we are doing sentences, not words
+            words = [w.split() for w in words]
+
             x = encode_words(words, letter_ids, max_length)
             pred = model.predict(x, batch_size=1)
             for pron in pred_to_ipa(pred, ids2ipa):
@@ -268,8 +285,10 @@ if __name__ == '__main__':
                             required=True)
     arg_parser.add_argument('--model-file', help='Path to the model file.',
                             default='model.h5')
-    arg_parser.add_argument('--max-length', type=int, default=20,
-                            help='Only words up to this length will be included.')
+    arg_parser.add_argument('--max-length', type=int, default=0,
+                            help=('Only input sequences up to this length'
+                                  + ' will be included.\n'
+                                  + 'Defaults to the longest input sequence.'))
     arg_parser.add_argument('--n-input-layers', type=int, default=1,
                             help='The number of layers in the encoder.')
     arg_parser.add_argument('--n-output-layers', type=int, default=1,
