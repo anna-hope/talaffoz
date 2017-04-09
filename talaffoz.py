@@ -238,7 +238,7 @@ def trim_output(ipa, end_char='#'):
 
 def main(prons_fp, model_fp, max_length,
          n_input_layers, n_output_layers, n_hidden_units,
-         n_epochs, batch_size):
+         n_epochs, batch_size, show_intermediate_output=False):
     logging.basicConfig(level=logging.INFO)
 
     data_path = prons_fp
@@ -268,7 +268,8 @@ def main(prons_fp, model_fp, max_length,
                             output_layers=n_output_layers,
                             hidden_units=n_hidden_units)
         train_model(model, [(X, y)], val_output,
-                    n_epochs=n_epochs, batch_size=batch_size)
+                    n_epochs=n_epochs, batch_size=batch_size,
+                    verbose=show_intermediate_output)
         model.save(model_fp)
 
     while True:
@@ -307,9 +308,12 @@ if __name__ == '__main__':
                             help='The number of hidden units in each layer.')
     arg_parser.add_argument('--n-epochs', type=int, default=5,
                             help='The number of epochs used to train the model.')
+    arg_parser.add_argument('--show-intermediate-output', action='store_true',
+                            help='Show intermediate output between training epochs.')
     arg_parser.add_argument('--batch-size', type=int, default=5,
                             help='Size of the mini-batch used in training.')
     args = arg_parser.parse_args()
     main(args.file, args.model_file, args.max_length,
          args.n_input_layers, args.n_output_layers,
-         args.n_hidden_units, args.n_epochs, args.batch_size)
+         args.n_hidden_units, args.n_epochs, args.batch_size,
+         show_intermediate_output=args.show_intermediate_output)
