@@ -1,14 +1,13 @@
-import codecs
 import logging
 from argparse import ArgumentParser
 from itertools import zip_longest, chain
 from pathlib import Path
-import sys
 from typing import Dict, List
 
 import numpy as np
 from keras.callbacks import EarlyStopping, ModelCheckpoint, Callback
-from keras.layers import Dense, LSTM, GRU, TimeDistributed, Input, RepeatVector
+from keras.layers import (Dense, LSTM, GRU, TimeDistributed,
+                          Input, RepeatVector, Embedding)
 from keras.models import Model, load_model
 from keras.optimizers import RMSprop, Adam
 from sklearn.model_selection import train_test_split
@@ -97,27 +96,37 @@ def prepare_data(pronunciations, max_length=0):
     ipa_ids[end_char] = 0
 
     # one-hot
-    X = np.zeros((len(pronunciations), max_length, len(letter_ids)),
-                 dtype=bool)
-    y = np.zeros((len(pronunciations), max_length, len(ipa_ids)),
-                 dtype=bool)
+    X = np.zeros((len(pronunciations), max_length, len(letter_ids)+1),
+                 dtype='int32')
+    y = np.zeros((len(pronunciations), max_length, len(ipa_ids)+1),
+                 dtype='int32')
+
+    # X = np.zeros((len(pronunciations), max_length),
+    #              dtype='int32')
+    # y = np.zeros((len(pronunciations), max_length),
+    #              dtype='int32')
 
     for n, (word, pronunciation) in enumerate(pronunciations):
         for i, c in enumerate(word):
             letter_id = letter_ids[c]
-            X[n, i, letter_id] = True
+            # X[n, i] = letter_id
+            X[n, i, letter_id] = 1
 
         for i, ipa_symbol in enumerate(pronunciation):
             symbol_id = ipa_ids[ipa_symbol]
-            y[n, i, symbol_id] = True
+            # y[n, i] = symbol_id
+            y[n, i, symbol_id] = 1
 
-    return X, y, letter_ids, ipa_ids
+    return X, y, letter_ids, ipa_ids, max_length
 
 
 def build_model(n_letters, n_symbols, max_len,
                 input_layers=1, output_layers=1,
                 hidden_units=512):
-    inputs = Input(shape=(None, n_letters))
+    inputs = Input(shape=(max_len, n_letters+1))
+    # inputs = Input(shape=(max_len,))
+    # encoded = Embedding(output_dim=512, input_dim=n_letters+1,
+    #                     input_length=max_len, mask_zero=True)(inputs)
 
     # add the encoder layers
 
@@ -126,10 +135,9 @@ def build_model(n_letters, n_symbols, max_len,
     # can be stacked in a loop
     encoded = inputs
     for _ in range(input_layers - 1):
-        encoded = LSTM(hidden_units, consume_less='cpu',
-                       return_sequences=True)(encoded)
+        encoded = LSTM(hidden_units, return_sequences=True)(encoded)
 
-    encoded = LSTM(hidden_units, consume_less='cpu')(encoded)
+    encoded = LSTM(hidden_units)(encoded)
 
     decoded = RepeatVector(max_len)(encoded)
 
@@ -138,9 +146,11 @@ def build_model(n_letters, n_symbols, max_len,
         decoded = LSTM(hidden_units, return_sequences=True)(decoded)
 
     predictions = TimeDistributed(
-                    Dense(n_symbols, activation='softmax'))(decoded)
+                    Dense(n_symbols+1,
+                          activation='softmax'))(decoded)
 
-    model = Model(input=inputs, output=predictions)
+    model = Model(inputs=inputs, outputs=predictions)
+    print(model.inputs, model.output_shape)
 
     optimizer = Adam()
     model.compile(optimizer=optimizer,
@@ -160,7 +170,7 @@ def encode_words(words, letter_ids: dict, max_length: int):
                                           fillvalue=end_char)]
         padded_words.append(word)
 
-    word_ids = np.zeros((len(padded_words), max_length, len(letter_ids)),
+    word_ids = np.zeros((len(padded_words), max_length, len(letter_ids)+1),
                         dtype=bool)
 
     for n, word in enumerate(padded_words):
@@ -209,7 +219,7 @@ def train_model(model, encoded, val_output, fp='model.h5',
         val_output.X_val = X_val
         val_output.y_val = y_val
 
-        model.fit(X_train, y_train, batch_size=batch_size, nb_epoch=n_epochs,
+        model.fit(X_train, y_train, batch_size=batch_size, epochs=n_epochs,
                   validation_data=(X_test, y_test),
                   callbacks=callbacks)
 
@@ -234,7 +244,7 @@ def main(prons_fp, model_fp, max_length,
     data_path = prons_fp
     pronunciations = load_data(data_path)
     # encoded, letter_ids, ipa_ids, buckets = prepare_data(pronunciations)
-    X, y, letter_ids, ipa_ids = prepare_data(pronunciations, max_length=max_length)
+    X, y, letter_ids, ipa_ids, max_length = prepare_data(pronunciations, max_length=max_length)
 
     assert '#' in letter_ids and '#' in ipa_ids
     # print('buckets', buckets)

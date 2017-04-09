@@ -5,6 +5,8 @@ from itertools import chain
 from pathlib import Path
 from typing import Iterable, Hashable, Dict, Union, List
 
+from pprint import pprint
+
 import numpy as np
 
 
@@ -15,18 +17,28 @@ class ModelWrapper(metaclass=ABCMeta):
         pass
 
 
+def load_json(file_path: Path):
+    with file_path.open(encoding='utf-8') as f:
+        seq2seq = json.load(f)
+
+    words_ipa = [(word, v['ipa'])
+                 for word, v in seq2seq.items()]
+    return words_ipa
+
 
 def load_data(file_path: Union[Path, str],
               only_alpha=True) -> Dict[str, List[str]]:
     logging.info('loading the data file {}'.format(file_path))
     file_path = Path(file_path)
-    with file_path.open() as f:
-        seq2seq = json.load(f)
 
-    # words_ipa = {word: v['ipa']
-    #              for word, v in pronunciations.items()}
+    if file_path.suffix == '.json':
+        seq2seq = load_json(file_path)
+    else:
+        with file_path.open(encoding='utf-8') as file:
+            seq2seq = [tuple(line.strip().split())
+                       for line in file]
+
     return seq2seq
-
 
 
 def make_sequence_ids(seqs: Iterable[Iterable[Hashable]]) -> Dict[Hashable, int]:
