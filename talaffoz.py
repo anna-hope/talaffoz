@@ -96,21 +96,21 @@ def prepare_data(pronunciations, max_length=0):
     ipa_ids[end_char] = 0
 
     # one-hot
-    X = np.zeros((len(pronunciations), max_length, len(letter_ids)+1),
-                 dtype='int32')
+    # X = np.zeros((len(pronunciations), max_length, len(letter_ids)+1),
+    #              dtype='int32')
     y = np.zeros((len(pronunciations), max_length, len(ipa_ids)+1),
                  dtype='int32')
 
-    # X = np.zeros((len(pronunciations), max_length),
-    #              dtype='int32')
+    X = np.zeros((len(pronunciations), max_length),
+                 dtype='int32')
     # y = np.zeros((len(pronunciations), max_length),
     #              dtype='int32')
 
     for n, (word, pronunciation) in enumerate(pronunciations):
         for i, c in enumerate(word):
             letter_id = letter_ids[c]
-            # X[n, i] = letter_id
-            X[n, i, letter_id] = 1
+            X[n, i] = letter_id
+            # X[n, i, letter_id] = 1
 
         for i, ipa_symbol in enumerate(pronunciation):
             symbol_id = ipa_ids[ipa_symbol]
@@ -123,17 +123,17 @@ def prepare_data(pronunciations, max_length=0):
 def build_model(n_letters, n_symbols, max_len,
                 input_layers=1, output_layers=1,
                 hidden_units=512):
-    inputs = Input(shape=(max_len, n_letters+1))
-    # inputs = Input(shape=(max_len,))
-    # encoded = Embedding(output_dim=512, input_dim=n_letters+1,
-    #                     input_length=max_len, mask_zero=True)(inputs)
+    # inputs = Input(shape=(max_len, n_letters+1))
+    inputs = Input(shape=(max_len,))
+    encoded = Embedding(output_dim=512, input_dim=n_letters+1,
+                        input_length=max_len, mask_zero=True)(inputs)
 
     # add the encoder layers
 
     # assign this variable
     # so that multiple encoder layers
     # can be stacked in a loop
-    encoded = inputs
+    # encoded = inputs
     for _ in range(input_layers - 1):
         encoded = LSTM(hidden_units, return_sequences=True)(encoded)
 
@@ -170,13 +170,12 @@ def encode_words(words, letter_ids: dict, max_length: int):
                                           fillvalue=end_char)]
         padded_words.append(word)
 
-    word_ids = np.zeros((len(padded_words), max_length, len(letter_ids)+1),
-                        dtype=bool)
+    word_ids = np.zeros((len(padded_words), max_length), dtype='int32')
 
     for n, word in enumerate(padded_words):
         for i, letter in enumerate(word):
             letter_id = letter_ids[letter]
-            word_ids[n, i, letter_id] = True
+            word_ids[n, i] = letter_id
 
     return word_ids
 
